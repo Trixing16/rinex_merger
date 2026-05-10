@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RINEX Merger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── Tokens ──────────────────────────────────────────────── */
+  :root {
+    --orange-700:#B43F0E; --orange-600:#CC4A12; --orange-500:#E55A1F;
+    --orange-100:#FCD9C5; --orange-50:#FDF1EB;
+    --ink-900:#0F1115; --ink-700:#3F4147; --ink-500:#71757C;
+    --ink-400:#9CA0A8; --ink-300:#D4D6DA; --ink-200:#ECEDF0;
+    --ink-100:#F4F4F1; --ink-50:#FAFAF7; --white:#fff;
+    --ok-700:#166534; --ok-50:#ECFDF3;
+    --warn-700:#B45309; --warn-50:#FEF6E7;
+    --danger-700:#B42318; --danger-50:#FEF1F0;
+    --font-sans:"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono:"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --shadow-sm:0 1px 2px rgba(15,17,21,0.04);
+    --shadow-md:0 6px 24px rgba(15,17,21,0.06);
+    --focus-ring:0 0 0 3px rgba(229,90,31,0.25);
+  }
+
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+  html, body { background:var(--white); }
+
+  body {
+    font-family:var(--font-sans);
+    font-size:15px;
+    line-height:22px;
+    color:var(--ink-900);
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    min-height:100vh;
+    padding:48px 32px 64px;
+  }
+
+  ::selection { background:var(--orange-100); color:var(--ink-900); }
+
+  /* ── Layout ──────────────────────────────────────────────── */
+  .wrap {
+    max-width:1100px;
+    margin:0 auto;
+  }
+
+  header.app {
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:24px;
+    margin-bottom:40px;
+    padding-bottom:24px;
+    border-bottom:1px solid var(--ink-200);
+  }
+
+  .brand {
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+
+  .brand .mark {
+    width:28px; height:28px;
+    border-radius:50%;
+    background:
+      radial-gradient(circle at center,
+        transparent 0, transparent 4px,
+        var(--orange-500) 4px, var(--orange-500) 5.5px,
+        transparent 5.5px, transparent 8px,
+        var(--ink-300) 8px, var(--ink-300) 9px,
+        transparent 9px, transparent 12px,
+        var(--ink-300) 12px, var(--ink-300) 13px,
+        transparent 13px);
+    flex-shrink:0;
+  }
+
+  .brand h1 {
+    font-size:18px;
+    line-height:24px;
+    font-weight:600;
+    letter-spacing:-0.005em;
+    color:var(--ink-900);
+  }
+
+  header.app .meta {
+    font-family:var(--font-mono);
+    font-size:11px;
+    line-height:16px;
+    text-transform:uppercase;
+    letter-spacing:0.12em;
+    color:var(--ink-500);
+  }
+
+  .grid {
+    display:grid;
+    grid-template-columns:1fr 340px;
+    gap:32px;
+    align-items:start;
+  }
+
+  @media (max-width: 880px) {
+    .grid { grid-template-columns: 1fr; }
+    body { padding:32px 20px; }
+  }
+
+  /* ── Card ────────────────────────────────────────────────── */
+  .card {
+    background:var(--white);
+    border:1px solid var(--ink-200);
+    border-radius:12px;
+    padding:24px;
+    margin-bottom:24px;
+  }
+
+  .card-title {
+    font-family:var(--font-mono);
+    font-size:11px;
+    line-height:16px;
+    font-weight:500;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--ink-500);
+    margin-bottom:16px;
+  }
+
+  /* ── Drop zone ───────────────────────────────────────────── */
+  #dropzone {
+    border:1.5px dashed var(--ink-300);
+    border-radius:12px;
+    padding:48px 24px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color 200ms cubic-bezier(0.2,0,0,1),
+               background 200ms cubic-bezier(0.2,0,0,1);
+    background:var(--ink-50);
+  }
+
+  #dropzone:hover, #dropzone.dragover {
+    border-color:var(--orange-500);
+    background:var(--orange-50);
+  }
+
+  #dropzone .drop-icon {
+    width:32px; height:32px;
+    margin:0 auto 12px;
+    color:var(--ink-400);
+    transition:color 200ms;
+  }
+
+  #dropzone:hover .drop-icon, #dropzone.dragover .drop-icon {
+    color:var(--orange-500);
+  }
+
+  #dropzone p {
+    font-size:15px;
+    line-height:22px;
+    color:var(--ink-900);
+    font-weight:500;
+  }
+
+  #dropzone p.sub {
+    font-size:13px;
+    line-height:20px;
+    color:var(--ink-500);
+    font-weight:400;
+    margin-top:4px;
+  }
+
+  #dropzone strong {
+    color:var(--orange-500);
+    font-weight:600;
+  }
+
+  #fileInput { display:none; }
+
+  /* ── Files header ────────────────────────────────────────── */
+  .files-header {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:20px;
+    margin-bottom:8px;
+  }
+
+  .file-count {
+    font-family:var(--font-mono);
+    font-size:13px;
+    color:var(--ink-700);
+  }
+  .file-count .num {
+    color:var(--ink-900);
+    font-weight:500;
+  }
+
+  .clear-btn {
+    font-size:13px;
+    color:var(--ink-500);
+    background:none;
+    border:none;
+    cursor:pointer;
+    padding:4px 8px;
+    border-radius:4px;
+    transition:color 120ms, background 120ms;
+  }
+  .clear-btn:hover { color:var(--danger-700); background:var(--danger-50); }
+
+  /* ── File list ───────────────────────────────────────────── */
+  #fileList {
+    max-height:280px;
+    overflow-y:auto;
+  }
+
+  #fileList::-webkit-scrollbar { width:6px; }
+  #fileList::-webkit-scrollbar-track { background:transparent; }
+  #fileList::-webkit-scrollbar-thumb { background:var(--ink-300); border-radius:3px; }
+
+  .file-item {
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:10px 12px;
+    border-radius:8px;
+    margin-bottom:2px;
+    font-family:var(--font-mono);
+    font-size:13px;
+    background:transparent;
+    border:1px solid transparent;
+    transition:background 120ms, border-color 120ms;
+    animation:slideIn 200ms cubic-bezier(0.2,0,0,1);
+  }
+
+  @keyframes slideIn {
+    from { opacity:0; transform:translateX(-6px); }
+    to   { opacity:1; transform:translateX(0); }
+  }
+
+  .file-item:hover { background:var(--ink-50); border-color:var(--ink-200); }
+
+  .file-item .file-icon {
+    width:14px; height:14px;
+    color:var(--ink-400);
+    flex-shrink:0;
+  }
+
+  .file-name {
+    color:var(--ink-900);
+    flex:1;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .file-size {
+    color:var(--ink-500);
+    font-size:12px;
+    flex-shrink:0;
+  }
+
+  .file-remove {
+    color:var(--ink-400);
+    cursor:pointer;
+    width:24px; height:24px;
+    border-radius:4px;
+    flex-shrink:0;
+    background:none;
+    border:none;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:color 120ms, background 120ms;
+  }
+  .file-remove:hover { color:var(--danger-700); background:var(--danger-50); }
+
+  /* ── Warning badge ───────────────────────────────────────── */
+  #warningWrap {
+    margin-top:16px;
+  }
+
+  .badge-warn {
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 12px;
+    background:var(--warn-50);
+    color:var(--warn-700);
+    border:1px solid #F2C572;
+    border-radius:8px;
+    font-size:13px;
+    line-height:20px;
+  }
+  .badge-warn svg { width:14px; height:14px; flex-shrink:0; }
+
+  /* ── Settings ────────────────────────────────────────────── */
+  .setting-row { margin-bottom:20px; }
+  .setting-row:last-child { margin-bottom:0; }
+
+  .setting-row label {
+    display:block;
+    font-family:var(--font-mono);
+    font-size:11px;
+    line-height:16px;
+    font-weight:500;
+    text-transform:uppercase;
+    letter-spacing:0.12em;
+    color:var(--ink-500);
+    margin-bottom:8px;
+  }
+
+  .setting-row input[type="text"],
+  .setting-row input[type="number"] {
+    width:100%;
+    background:var(--white);
+    border:1px solid var(--ink-300);
+    border-radius:8px;
+    padding:10px 12px;
+    color:var(--ink-900);
+    font-family:var(--font-mono);
+    font-size:13px;
+    line-height:20px;
+    outline:none;
+    transition:border-color 120ms, box-shadow 120ms;
+  }
+
+  .setting-row input:focus {
+    border-color:var(--orange-500);
+    box-shadow:var(--focus-ring);
+  }
+
+  .radio-group {
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:6px;
+  }
+
+  .radio-btn {
+    padding:9px 0;
+    text-align:center;
+    border:1px solid var(--ink-300);
+    background:var(--white);
+    border-radius:8px;
+    cursor:pointer;
+    font-family:var(--font-mono);
+    font-size:13px;
+    color:var(--ink-700);
+    transition:border-color 120ms, color 120ms, background 120ms;
+    user-select:none;
+  }
+  .radio-btn:hover { border-color:var(--ink-400); }
+  .radio-btn.active {
+    border-color:var(--orange-500);
+    color:var(--orange-500);
+    background:var(--orange-50);
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────── */
+  .btn {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    width:100%;
+    padding:12px 16px;
+    border-radius:8px;
+    font-family:var(--font-sans);
+    font-size:15px;
+    line-height:22px;
+    font-weight:500;
+    cursor:pointer;
+    border:1px solid transparent;
+    transition:background 120ms, color 120ms, border-color 120ms, transform 120ms;
+  }
+  .btn svg { width:16px; height:16px; }
+
+  .btn-primary {
+    background:var(--orange-500);
+    color:var(--white);
+  }
+  .btn-primary:hover { background:var(--orange-600); }
+  .btn-primary:active { background:var(--orange-700); transform:translateY(1px); }
+  .btn-primary:disabled {
+    background:var(--ink-100);
+    color:var(--ink-400);
+    cursor:not-allowed;
+    transform:none;
+  }
+  .btn-primary:focus-visible { outline:none; box-shadow:var(--focus-ring); }
+
+  .btn-secondary {
+    background:var(--white);
+    color:var(--ink-900);
+    border-color:var(--ink-300);
+  }
+  .btn-secondary:hover { border-color:var(--ink-400); background:var(--ink-50); }
+
+  /* ── Log ─────────────────────────────────────────────────── */
+  #log {
+    font-family:var(--font-mono);
+    font-size:13px;
+    line-height:22px;
+    min-height:80px;
+    max-height:240px;
+    overflow-y:auto;
+    background:var(--ink-50);
+    border:1px solid var(--ink-200);
+    border-radius:8px;
+    padding:14px 16px;
+    color:var(--ink-700);
+  }
+  #log::-webkit-scrollbar { width:6px; }
+  #log::-webkit-scrollbar-track { background:transparent; }
+  #log::-webkit-scrollbar-thumb { background:var(--ink-300); border-radius:3px; }
+
+  .log-line { display:block; white-space:pre; }
+  .log-info  { color:var(--ink-500); }
+  .log-ok    { color:var(--ok-700); }
+  .log-warn  { color:var(--warn-700); }
+  .log-error { color:var(--danger-700); }
+  .log-head  { color:var(--ink-900); font-weight:500; }
+
+  /* ── Progress ────────────────────────────────────────────── */
+  #progressWrap {
+    margin-top:16px;
+    display:none;
+  }
+  #progressBar {
+    height:3px;
+    background:var(--ink-200);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  #progressFill {
+    height:100%;
+    background:var(--orange-500);
+    width:0%;
+    transition:width 280ms cubic-bezier(0.2,0,0,1);
+  }
+
+  /* ── Result ──────────────────────────────────────────────── */
+  #resultWrap {
+    margin-top:20px;
+    display:none;
+  }
+
+  .result-card {
+    background:var(--ok-50);
+    border:1px solid #B7E4C7;
+    border-radius:12px;
+    padding:20px;
+  }
+
+  .result-title {
+    display:flex; align-items:center; gap:8px;
+    font-size:15px;
+    font-weight:600;
+    color:var(--ok-700);
+    margin-bottom:14px;
+  }
+  .result-title svg { width:16px; height:16px; }
+
+  .result-stats {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px 24px;
+    margin-bottom:16px;
+  }
+
+  .result-stat {
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    padding:6px 0;
+    border-bottom:1px solid rgba(22,101,52,0.10);
+  }
+  .result-stat .label {
+    font-family:var(--font-mono);
+    font-size:11px;
+    line-height:16px;
+    text-transform:uppercase;
+    letter-spacing:0.12em;
+    color:var(--ink-500);
+  }
+  .result-stat .value {
+    font-family:var(--font-mono);
+    font-size:13px;
+    line-height:20px;
+    color:var(--ink-900);
+  }
+
+  /* ── Hint text ───────────────────────────────────────────── */
+  .hint {
+    font-size:13px;
+    line-height:20px;
+    color:var(--ink-500);
+    margin-top:12px;
+  }
+
+  /* ── Sub-section in sidebar ──────────────────────────────── */
+  .sub-section {
+    margin-top:28px;
+    padding-top:24px;
+    border-top:1px solid var(--ink-200);
+  }
+
+  .sub-section p {
+    font-size:13px;
+    line-height:20px;
+    color:var(--ink-500);
+  }
+  .sub-section p + p { margin-top:10px; }
+
+  /* ── Hidden until visible ────────────────────────────────── */
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="app">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <h1>RINEX Merger</h1>
+    </div>
+    <span class="meta">RINEX 2.11 · Merge + Resample · Local</span>
+  </header>
+
+  <div class="grid">
+
+    <!-- Left: input + log -->
+    <div>
+      <div class="card">
+        <div class="card-title">Input files</div>
+
+        <div id="dropzone" onclick="document.getElementById('fileInput').click()">
+          <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <p><strong>Drop .26o / .rnx files here</strong></p>
+          <p class="sub">or click to browse</p>
+        </div>
+        <input type="file" id="fileInput" multiple accept=".26o,.rnx,.obs,.26O,.RNX,.OBS">
+
+        <div class="files-header">
+          <div class="file-count">Files loaded: <span class="num" id="fileCountNum">0</span></div>
+          <button class="clear-btn" onclick="clearFiles()">Clear all</button>
+        </div>
+
+        <div id="fileList"></div>
+
+        <div id="warningWrap" hidden>
+          <span class="badge-warn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            Files from different days detected — check output spans
+          </span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Processing log</div>
+        <div id="log"><span class="log-info">// Ready. Load files and click Merge.</span></div>
+        <div id="progressWrap">
+          <div id="progressBar"><div id="progressFill"></div></div>
+        </div>
+        <div id="resultWrap">
+          <div class="result-card">
+            <div class="result-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Merge complete
+            </div>
+            <div class="result-stats" id="resultStats"></div>
+            <button class="btn btn-secondary" onclick="downloadFile()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Download merged file
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: settings -->
+    <div>
+      <div class="card">
+        <div class="card-title">Output settings</div>
+
+        <div class="setting-row">
+          <label>Output filename</label>
+          <input type="text" id="outputName" value="merged_30s.26o" placeholder="merged_30s.26o">
+        </div>
+
+        <div class="setting-row">
+          <label>Resample interval</label>
+          <div class="radio-group">
+            <div class="radio-btn" data-interval="1" onclick="setIntervalChoice(1)">1s</div>
+            <div class="radio-btn active" data-interval="30" onclick="setIntervalChoice(30)">30s</div>
+            <div class="radio-btn" data-interval="15" onclick="setIntervalChoice(15)">15s</div>
+            <div class="radio-btn" data-interval="60" onclick="setIntervalChoice(60)">60s</div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <label>Custom interval (seconds)</label>
+          <input type="number" id="customInterval" value="30" min="1" max="3600">
+        </div>
+
+        <p class="hint">AUSPOS requires 30s. Files are filtered to epochs where seconds % interval = 0.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Actions</div>
+        <button id="mergeBtn" class="btn btn-primary" onclick="mergeFiles()" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          Merge files
+        </button>
+
+        <div class="sub-section">
+          <div class="card-title" style="margin-bottom:10px">About</div>
+          <p>Merges multiple RINEX 2.11 observation files into one, deduplicates overlapping epochs, and resamples to your chosen interval.</p>
+          <p>Header is taken from the first file. <span class="t-mono">TIME OF FIRST/LAST OBS</span> and <span class="t-mono">INTERVAL</span> are updated automatically.</p>
+          <p>All processing happens locally in your browser — no data is uploaded anywhere.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let loadedFiles = [];
+  let mergedBlob = null;
+  let selectedInterval = 30;
+
+  // ── Drag and drop ──────────────────────────────────────────
+  const dropzone = document.getElementById('dropzone');
+
+  dropzone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    handleFiles([...e.dataTransfer.files]);
+  });
+
+  document.getElementById('fileInput').addEventListener('change', e => {
+    handleFiles([...e.target.files]);
+    e.target.value = '';
+  });
+
+  function handleFiles(files) {
+    const rinexFiles = files.filter(f =>
+      f.name.match(/\.(26o|rnx|obs|26O|RNX|OBS)$/i)
+    );
+    if (!rinexFiles.length) {
+      log('warn', '⚠ No RINEX files found in selection');
+      return;
+    }
+    rinexFiles.forEach(f => {
+      if (!loadedFiles.find(x => x.name === f.name)) {
+        loadedFiles.push(f);
+      }
+    });
+    loadedFiles.sort((a, b) => a.name.localeCompare(b.name));
+    renderFileList();
+    checkDayWarning();
+    updateMergeBtn();
+    log('info', `// ${rinexFiles.length} file(s) added. Total: ${loadedFiles.length}`);
+  }
+
+  function renderFileList() {
+    const list = document.getElementById('fileList');
+    list.innerHTML = '';
+    loadedFiles.forEach((f, i) => {
+      const div = document.createElement('div');
+      div.className = 'file-item';
+      div.innerHTML = `
+        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+        <span class="file-name">${escapeHtml(f.name)}</span>
+        <span class="file-size">${(f.size/1024).toFixed(0)} KB</span>
+        <button class="file-remove" aria-label="Remove" onclick="removeFile(${i})">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      `;
+      list.appendChild(div);
+    });
+    document.getElementById('fileCountNum').textContent = loadedFiles.length;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+  }
+
+  function removeFile(i) {
+    loadedFiles.splice(i, 1);
+    renderFileList();
+    checkDayWarning();
+    updateMergeBtn();
+  }
+
+  function clearFiles() {
+    loadedFiles = [];
+    renderFileList();
+    updateMergeBtn();
+    document.getElementById('warningWrap').hidden = true;
+    document.getElementById('resultWrap').style.display = 'none';
+    clearLog();
+  }
+
+  function checkDayWarning() {
+    // Extract day from filename pattern XXXXXX202605090400 -> day 09
+    const days = new Set(loadedFiles.map(f => f.name.slice(14, 16)));
+    document.getElementById('warningWrap').hidden = !(days.size > 1);
+  }
+
+  function updateMergeBtn() {
+    document.getElementById('mergeBtn').disabled = loadedFiles.length < 2;
+  }
+
+  // ── Interval selector ──────────────────────────────────────
+  function setIntervalChoice(val) {
+    selectedInterval = val;
+    document.getElementById('customInterval').value = val;
+    document.querySelectorAll('.radio-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.interval) === val);
+    });
+  }
+
+  document.getElementById('customInterval').addEventListener('input', e => {
+    const v = parseInt(e.target.value) || 30;
+    selectedInterval = v;
+    document.querySelectorAll('.radio-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.interval) === v);
+    });
+  });
+
+  // ── Logging ────────────────────────────────────────────────
+  function log(type, msg) {
+    const logEl = document.getElementById('log');
+    const span = document.createElement('span');
+    span.className = `log-line log-${type || 'info'}`;
+    span.textContent = msg;
+    logEl.appendChild(span);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function clearLog() {
+    document.getElementById('log').innerHTML =
+      '<span class="log-line log-info">// Ready. Load files and click Merge.</span>';
+  }
+
+  // ── RINEX parsing ──────────────────────────────────────────
+  function readFileText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+
+  function isEpochLine(line) {
+    if (!line || line[0] !== ' ' || line.length < 26) return false;
+    try {
+      const yy = parseInt(line.substring(1,3));
+      const mm = parseInt(line.substring(4,6));
+      const dd = parseInt(line.substring(7,9));
+      const hh = parseInt(line.substring(10,12));
+      const mn = parseInt(line.substring(13,15));
+      const ss = parseFloat(line.substring(16,26));
+      return !isNaN(yy) && !isNaN(mm) && !isNaN(dd) &&
+             !isNaN(hh) && !isNaN(mn) && !isNaN(ss);
+    } catch { return false; }
+  }
+
+  function parseEpochTime(line) {
+    const yy = parseInt(line.substring(1,3));
+    const mm = parseInt(line.substring(4,6));
+    const dd = parseInt(line.substring(7,9));
+    const hh = parseInt(line.substring(10,12));
+    const mn = parseInt(line.substring(13,15));
+    const ss = Math.floor(parseFloat(line.substring(16,26)));
+    const year = yy < 80 ? 2000 + yy : 1900 + yy;
+    return new Date(year, mm-1, dd, hh, mn, ss).getTime();
+  }
+
+  function readHeader(lines) {
+    const header = [];
+    for (const line of lines) {
+      header.push(line);
+      if (line.includes('END OF HEADER')) break;
+    }
+    return header;
+  }
+
+  function readEpochs(lines) {
+    const epochs = new Map();
+    let inHeader = true;
+    let currentTime = null;
+    let currentLines = [];
+
+    for (const line of lines) {
+      if (inHeader) {
+        if (line.includes('END OF HEADER')) inHeader = false;
+        continue;
+      }
+      if (isEpochLine(line)) {
+        if (currentTime !== null && !epochs.has(currentTime)) {
+          epochs.set(currentTime, currentLines);
+        }
+        currentTime = parseEpochTime(line);
+        currentLines = [line];
+      } else {
+        currentLines.push(line);
+      }
+    }
+    if (currentTime !== null && !epochs.has(currentTime)) {
+      epochs.set(currentTime, currentLines);
+    }
+    return epochs;
+  }
+
+  function updateHeader(headerLines, firstT, lastT, interval) {
+    const dt = t => new Date(t);
+    const pad = (n, w=2) => String(n).padStart(w, ' ');
+    const updated = [];
+
+    for (const line of headerLines) {
+      if (line.includes('INTERVAL')) {
+        updated.push(
+          '    ' + interval.toFixed(3).padStart(10) +
+          '                                                  INTERVAL            \n'
+        );
+      } else if (line.includes('TIME OF FIRST OBS')) {
+        const d = dt(firstT);
+        updated.push(
+          `  ${d.getFullYear()}    ${pad(d.getMonth()+1)}    ${pad(d.getDate())}` +
+          `    ${pad(d.getHours())}    ${pad(d.getMinutes())}` +
+          `   ${d.getSeconds().toFixed(7).padStart(10)}     GPS         TIME OF FIRST OBS   \n`
+        );
+      } else if (line.includes('TIME OF LAST OBS')) {
+        const d = dt(lastT);
+        updated.push(
+          `  ${d.getFullYear()}    ${pad(d.getMonth()+1)}    ${pad(d.getDate())}` +
+          `    ${pad(d.getHours())}    ${pad(d.getMinutes())}` +
+          `   ${d.getSeconds().toFixed(7).padStart(10)}     GPS         TIME OF LAST OBS    \n`
+        );
+      } else if (line.includes('PRN / # OF OBS')) {
+        // skip
+      } else {
+        updated.push(line);
+      }
+    }
+    return updated;
+  }
+
+  // ── Main merge ─────────────────────────────────────────────
+  async function mergeFiles() {
+    const btn = document.getElementById('mergeBtn');
+    btn.disabled = true;
+    mergedBlob = null;
+    document.getElementById('resultWrap').style.display = 'none';
+    document.getElementById('progressWrap').style.display = 'block';
+    clearLog();
+
+    const interval = parseInt(document.getElementById('customInterval').value) || 30;
+    const outputName = document.getElementById('outputName').value || 'merged_30s.26o';
+
+    log('head', `// RINEX Merger — ${loadedFiles.length} files — ${interval}s interval`);
+    log('info', '');
+
+    try {
+      let header = null;
+      const allEpochs = new Map();
+
+      for (let i = 0; i < loadedFiles.length; i++) {
+        const f = loadedFiles[i];
+        setProgress((i / loadedFiles.length) * 70);
+        log('info', `  reading  ${f.name}`);
+
+        const text = await readFileText(f);
+        const lines = text.split('\n');
+
+        if (!header) header = readHeader(lines);
+
+        const epochs = readEpochs(lines);
+        let newCount = 0;
+        epochs.forEach((lines, t) => {
+          if (!allEpochs.has(t)) { allEpochs.set(t, lines); newCount++; }
+        });
+        log('ok', `  ✓ ${f.name.substring(0,30)} — ${newCount} new epochs`);
+      }
+
+      log('info', '');
+      log('info', `  total unique epochs: ${allEpochs.size}`);
+      setProgress(80);
+
+      // Resample
+      const resampled = new Map();
+      allEpochs.forEach((lines, t) => {
+        if (new Date(t).getSeconds() % interval === 0) {
+          resampled.set(t, lines);
+        }
+      });
+
+      log('info', `  after ${interval}s resample: ${resampled.size} epochs`);
+      setProgress(90);
+
+      if (!resampled.size) {
+        log('error', '  ✗ No epochs remain after resampling!');
+        btn.disabled = false;
+        return;
+      }
+
+      const sortedTimes = [...resampled.keys()].sort((a,b) => a-b);
+      const firstT = sortedTimes[0];
+      const lastT  = sortedTimes[sortedTimes.length - 1];
+
+      const updatedHeader = updateHeader(header, firstT, lastT, interval);
+
+      // Build output string
+      let output = updatedHeader.join('');
+      for (const t of sortedTimes) {
+        output += resampled.get(t).join('\n') + '\n';
+      }
+
+      mergedBlob = new Blob([output], { type: 'text/plain' });
+      setProgress(100);
+
+      const sizeMB = (mergedBlob.size / 1024 / 1024).toFixed(1);
+      const durationHrs = ((lastT - firstT) / 3600000).toFixed(1);
+      const firstDate = new Date(firstT);
+      const lastDate  = new Date(lastT);
+
+      log('info', '');
+      log('ok', `  ✓ Merge complete`);
+
+      // Show result card
+      document.getElementById('resultStats').innerHTML = `
+        <div class="result-stat"><span class="label">Files merged</span><span class="value">${loadedFiles.length}</span></div>
+        <div class="result-stat"><span class="label">Epochs</span><span class="value">${resampled.size}</span></div>
+        <div class="result-stat"><span class="label">Interval</span><span class="value">${interval}s</span></div>
+        <div class="result-stat"><span class="label">Duration</span><span class="value">${durationHrs} hrs</span></div>
+        <div class="result-stat"><span class="label">Start</span><span class="value">${firstDate.toISOString().replace('T',' ').substring(0,19)}</span></div>
+        <div class="result-stat"><span class="label">End</span><span class="value">${lastDate.toISOString().replace('T',' ').substring(0,19)}</span></div>
+        <div class="result-stat"><span class="label">File size</span><span class="value">${sizeMB} MB</span></div>
+        <div class="result-stat"><span class="label">Output</span><span class="value">${escapeHtml(outputName)}</span></div>
+      `;
+      document.getElementById('resultWrap').style.display = 'block';
+
+    } catch(err) {
+      log('error', `  ✗ Error: ${err.message}`);
+    }
+
+    btn.disabled = false;
+    setTimeout(() => {
+      document.getElementById('progressWrap').style.display = 'none';
+      setProgress(0);
+    }, 1000);
+  }
+
+  function setProgress(pct) {
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  function downloadFile() {
+    if (!mergedBlob) return;
+    const name = document.getElementById('outputName').value || 'merged_30s.26o';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(mergedBlob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+</script>
+
+</body>
+</html>
