@@ -800,8 +800,9 @@
   function readHeader(lines) {
     const header = [];
     for (const line of lines) {
-      header.push(line);
-      if (line.includes('END OF HEADER')) break;
+      const clean = line.replace(/\r/g, '');
+      header.push(clean);
+      if (clean.includes('END OF HEADER')) break;
     }
     return header;
   }
@@ -842,26 +843,26 @@
       if (line.includes('INTERVAL')) {
         updated.push(
           '    ' + interval.toFixed(3).padStart(10) +
-          '                                                  INTERVAL            \n'
+          '                                                  INTERVAL            '
         );
       } else if (line.includes('TIME OF FIRST OBS')) {
         const d = dt(firstT);
         updated.push(
           `  ${d.getFullYear()}    ${pad(d.getMonth()+1)}    ${pad(d.getDate())}` +
           `    ${pad(d.getHours())}    ${pad(d.getMinutes())}` +
-          `   ${d.getSeconds().toFixed(7).padStart(10)}     GPS         TIME OF FIRST OBS   \n`
+          `   ${d.getSeconds().toFixed(7).padStart(10)}     GPS         TIME OF FIRST OBS   `
         );
       } else if (line.includes('TIME OF LAST OBS')) {
         const d = dt(lastT);
         updated.push(
           `  ${d.getFullYear()}    ${pad(d.getMonth()+1)}    ${pad(d.getDate())}` +
           `    ${pad(d.getHours())}    ${pad(d.getMinutes())}` +
-          `   ${d.getSeconds().toFixed(7).padStart(10)}     GPS         TIME OF LAST OBS    \n`
+          `   ${d.getSeconds().toFixed(7).padStart(10)}     GPS         TIME OF LAST OBS    `
         );
       } else if (line.includes('PRN / # OF OBS')) {
         // skip
       } else {
-        updated.push(line);
+        updated.push(line.replace(/\r/g, ''));
       }
     }
     return updated;
@@ -938,11 +939,10 @@
       const updatedHeader = updateHeader(header, firstT, lastT, interval);
 
       // Build output with consistent \r\n line endings throughout
-      // Header lines already end with \n from updateHeader — strip and re-add \r\n
-      let outputLines = updatedHeader.map(l => l.replace(/\n$/, ''));
+      let outputLines = updatedHeader.slice(); // already clean from updateHeader
       for (const t of sortedTimes) {
         for (const l of resampled.get(t)) {
-          outputLines.push(l);
+          outputLines.push(l.replace(/\r/g, ''));
         }
       }
       const output = outputLines.join('\r\n') + '\r\n';
