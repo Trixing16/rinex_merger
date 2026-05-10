@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <style>
   /* ── Tokens ──────────────────────────────────────────────── */
   :root {
@@ -592,7 +591,7 @@
 
         <div class="setting-row">
           <label>Output filename</label>
-          <input type="text" id="outputName" value="merged_30s.26o" placeholder="merged_30s.26o">
+          <input type="text" id="outputName" value="merged30s.26o" placeholder="merged30s.26o">
         </div>
 
         <div class="setting-row">
@@ -763,7 +762,11 @@
   function readFileText(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = e => resolve(e.target.result);
+      reader.onload = e => {
+        // Normalise all line endings to \n for internal processing
+        const text = e.target.result.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        resolve(text);
+      };
       reader.onerror = reject;
       reader.readAsText(file);
     });
@@ -873,8 +876,14 @@
     document.getElementById('progressWrap').style.display = 'block';
     clearLog();
 
+    const rawName = document.getElementById('outputName').value || 'merged_30s.26o';
+    // AUSPOS rule: no special characters, spaces, underscores, or symbols in filename
+    const outputName = rawName.replace(/[^A-Za-z0-9.]/g, '');
+    if (outputName !== rawName) {
+      log('warn', `  ⚠ Filename sanitised: "${rawName}" → "${outputName}" (AUSPOS requires no special chars)`);
+      document.getElementById('outputName').value = outputName;
+    }
     const interval = parseInt(document.getElementById('customInterval').value) || 30;
-    const outputName = document.getElementById('outputName').value || 'merged_30s.26o';
 
     log('head', `// RINEX Merger — ${loadedFiles.length} files — ${interval}s interval`);
     log('info', '');
@@ -928,11 +937,15 @@
 
       const updatedHeader = updateHeader(header, firstT, lastT, interval);
 
-      // Build output string
-      let output = updatedHeader.join('');
+      // Build output with consistent \r\n line endings throughout
+      // Header lines already end with \n from updateHeader — strip and re-add \r\n
+      let outputLines = updatedHeader.map(l => l.replace(/\n$/, ''));
       for (const t of sortedTimes) {
-        output += resampled.get(t).join('\n') + '\n';
+        for (const l of resampled.get(t)) {
+          outputLines.push(l);
+        }
       }
+      const output = outputLines.join('\r\n') + '\r\n';
 
       mergedBlob = new Blob([output], { type: 'text/plain' });
       setProgress(100);
